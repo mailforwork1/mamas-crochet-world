@@ -77,6 +77,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let tries = 0;
 
+    // Change the hash AND tell the router about it (replaceState alone
+    // does not fire a hashchange event).
+    const goToAdmin = () => {
+      if (window.location.hash !== "#/admin") {
+        window.history.replaceState(null, "", window.location.pathname + "#/admin");
+      }
+      try {
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      } catch {
+        window.dispatchEvent(new Event("hashchange"));
+      }
+    };
+
     const attach = () => {
       const ni = window.netlifyIdentity;
       if (!ni) {
@@ -109,15 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReady(true);
         // Once the widget has consumed the token, land the user on /#/admin.
         if (stashed) {
-          const isRecovery = /recovery_token=|invite_token=/.test(stashed);
-          if (isRecovery) ni.open(stashed.includes("invite_token=") ? "signup" : "login");
-          window.history.replaceState(null, "", window.location.pathname + "#/admin");
+          if (/invite_token=/.test(stashed)) ni.open("signup");
+          else if (/recovery_token=/.test(stashed)) ni.open("login");
+          goToAdmin();
         }
       });
       ni.on("login", (u) => {
         setUser(u ?? null);
         ni.close();
-        window.location.hash = "#/admin";
+        goToAdmin();
       });
       ni.on("logout", () => setUser(null));
 
