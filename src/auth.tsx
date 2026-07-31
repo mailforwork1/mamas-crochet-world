@@ -76,25 +76,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /* Wire up Netlify Identity if the widget is on the page */
   useEffect(() => {
     let tries = 0;
+
     const attach = () => {
       const ni = window.netlifyIdentity;
       if (!ni) {
-        if (tries++ < 20) return void setTimeout(attach, 150);
+        if (tries++ < 25) return void setTimeout(attach, 150);
         setReady(true); // no Identity -> local mode
         return;
       }
+
+      // An invite / recovery link puts a token in the URL hash. Our hash
+      // router would wipe it before the widget reads it, so index.html
+      // stashes it in sessionStorage — put it back for the widget.
+      let stashed: string | null = null;
+      try {
+        stashed = sessionStorage.getItem("mcw_identity_hash");
+      } catch {
+        /* ignore */
+      }
+      if (stashed) {
+        try {
+          sessionStorage.removeItem("mcw_identity_hash");
+        } catch {
+          /* ignore */
+        }
+        // Restore the token hash so the widget can pick it up on init().
+        window.history.replaceState(null, "", window.location.pathname + stashed);
+      }
+
       ni.on("init", (u) => {
         setUser(u ?? null);
         setReady(true);
+        // Once the widget has consumed the token, land the user on /#/admin.
+        if (stashed) {
+          const isRecovery = /recovery_token=|invite_token=/.test(stashed);
+          if (isRecovery) ni.open(stashed.includes("invite_token=") ? "signup" : "login");
+          window.history.replaceState(null, "", window.location.pathname + "#/admin");
+        }
       });
       ni.on("login", (u) => {
         setUser(u ?? null);
         ni.close();
+        window.location.hash = "#/admin";
       });
       ni.on("logout", () => setUser(null));
+
       ni.init();
       setIdentity(ni);
     };
+
     attach();
   }, []);
 
