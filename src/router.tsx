@@ -31,7 +31,15 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("popstate", onHash);
+    // Safety net: the Identity widget rewrites the URL with replaceState,
+    // which fires no event. Poll briefly so we never get stuck.
+    const iv = window.setInterval(onHash, 400);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      window.removeEventListener("popstate", onHash);
+      window.clearInterval(iv);
+    };
   }, []);
 
   const navigate = (r: Route) => {
