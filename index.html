@@ -7,7 +7,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Dancing+Script:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <title>Mama's Crochet World — Beautifully Handcrafted Creations, Made with Love</title>
-    <script async defer src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    <!-- Capture Netlify Identity tokens BEFORE the hash router can touch them -->
+    <script>
+      (function () {
+        var h = window.location.hash || "";
+        var m = h.match(/(invite_token|recovery_token|confirmation_token|email_change_token|access_token|error_description)=/);
+        if (m) {
+          try { sessionStorage.setItem("mcw_identity_hash", h); } catch (e) {}
+        }
+      })();
+    </script>
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
   </head>
   <body>
     <div id="root"></div>
