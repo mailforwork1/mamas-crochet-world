@@ -283,6 +283,7 @@ function GalleryPicker({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [link, setLink] = useState("");
 
   const add = async (files: File[]) => {
     setBusy(true);
@@ -295,6 +296,18 @@ function GalleryPicker({
     } finally {
       setBusy(false);
     }
+  };
+
+  const addLink = () => {
+    const url = link.trim();
+    if (!url) return;
+    if (value.includes(url)) {
+      setErr("That photo is already in the gallery.");
+      return;
+    }
+    onChange([...value, url]);
+    setLink("");
+    setErr("");
   };
 
   const move = (i: number, dir: -1 | 1) => {
@@ -338,9 +351,33 @@ function GalleryPicker({
         </button>
       </div>
 
+      {/* paste an image link */}
+      <div className="flex gap-2">
+        <input
+          value={link}
+          onChange={(e) => { setLink(e.target.value); setErr(""); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addLink();
+            }
+          }}
+          placeholder="…or paste an image link and press Add"
+          className={inputCls}
+        />
+        <button
+          type="button"
+          onClick={addLink}
+          disabled={!link.trim()}
+          className="shrink-0 rounded-full bg-[#4a3f3a] px-5 py-2.5 text-[0.6rem] tracking-[0.18em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+
       {err && <p className="text-[0.65rem] text-[#b87168]">{err}</p>}
       <p className="text-[0.62rem] text-[#4a3f3a]/45">
-        You can select several photos at once. The main photo above is shown first.
+        Upload several photos at once, or paste a link. The main photo above is shown first.
       </p>
 
       <input
