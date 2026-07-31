@@ -7,80 +7,27 @@ import type { ProductDetail } from "../data";
 
 /* =================== LOGIN =================== */
 function Login() {
-  const { openLogin, devLogin, hasIdentity, ready } = useAuth();
+  const {
+    login, devLogin, requestPasswordReset, setPassword,
+    hasIdentity, ready, pending, clearPending,
+  } = useAuth();
   const { navigate } = useRouter();
+
+  const [mode, setMode] = useState<"login" | "forgot">("login");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const r = devLogin(email, code);
-    if (!r.ok) setErr(r.error ?? "Could not sign in.");
-  };
-
-  return (
+  const wrap = (title: string, sub: string, body: React.ReactNode) => (
     <section className="mx-auto max-w-md px-6 py-24">
       <div className="rounded-[28px] bg-white/80 p-8 ring-1 ring-[#e8b4ad]/30 shadow-[0_20px_60px_-30px_rgba(184,113,104,0.35)]">
         <p className="text-[0.7rem] tracking-[0.32em] uppercase text-[#b87168]">Private</p>
-        <h1 className="font-serif mt-3 text-3xl text-[#4a3f3a]">Admin Sign In</h1>
-
-        {!ready ? (
-          <p className="mt-6 text-sm text-[#4a3f3a]/60">Loading…</p>
-        ) : hasIdentity ? (
-          <>
-            <p className="mt-2 text-sm text-[#4a3f3a]/65">
-              Sign in with your shop email to manage products, prices and photos.
-            </p>
-            <button
-              onClick={openLogin}
-              className="mt-7 w-full rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition"
-            >
-              Sign in with email
-            </button>
-            <p className="mt-3 text-center text-[0.65rem] leading-relaxed text-[#4a3f3a]/50">
-              Forgot your password? Choose “Forgot password” in the sign-in window.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-2 text-sm text-[#4a3f3a]/65">
-              Local preview mode — sign in with your development passcode.
-            </p>
-            <form onSubmit={submit} className="mt-7 grid gap-4">
-              <label className="grid gap-1.5">
-                <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Email</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setErr(""); }}
-                  placeholder="you@example.com"
-                  required
-                  className="rounded-xl bg-white px-4 py-3 text-sm text-[#4a3f3a] ring-1 ring-[#e8b4ad]/40 outline-none focus:ring-[#b87168]"
-                />
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Passcode</span>
-                <input
-                  type="password"
-                  value={code}
-                  onChange={(e) => { setCode(e.target.value); setErr(""); }}
-                  placeholder="••••••••"
-                  required
-                  className="rounded-xl bg-white px-4 py-3 text-sm text-[#4a3f3a] ring-1 ring-[#e8b4ad]/40 outline-none focus:ring-[#b87168]"
-                />
-              </label>
-              {err && <p className="text-sm text-[#b87168]">{err}</p>}
-              <button
-                type="submit"
-                className="mt-2 rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition"
-              >
-                Sign In
-              </button>
-            </form>
-          </>
-        )}
-
+        <h1 className="font-serif mt-3 text-3xl text-[#4a3f3a]">{title}</h1>
+        <p className="mt-2 text-sm text-[#4a3f3a]/65">{sub}</p>
+        {body}
         <button
           type="button"
           onClick={() => navigate({ name: "home" })}
@@ -90,6 +37,145 @@ function Login() {
         </button>
       </div>
     </section>
+  );
+
+  const inputBox =
+    "rounded-xl bg-white px-4 py-3 text-sm text-[#4a3f3a] ring-1 ring-[#e8b4ad]/40 outline-none focus:ring-[#b87168]";
+  const primaryBtn =
+    "mt-2 rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition disabled:opacity-50";
+
+  /* ---- 1. arrived from an invite / reset email ---- */
+  if (pending) {
+    const submit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setErr("");
+      if (pw.length < 8) return setErr("Password must be at least 8 characters.");
+      if (pw !== pw2) return setErr("The two passwords do not match.");
+      setBusy(true);
+      const r = await setPassword(pw);
+      setBusy(false);
+      if (!r.ok) setErr(r.error ?? "Could not set the password.");
+    };
+
+    return wrap(
+      pending.kind === "invite" ? "Welcome — set your password" : "Choose a new password",
+      "Pick something you'll remember. At least 8 characters.",
+      <form onSubmit={submit} className="mt-7 grid gap-4">
+        <label className="grid gap-1.5">
+          <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">New password</span>
+          <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }}
+            placeholder="••••••••" required autoFocus className={inputBox} />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Repeat password</span>
+          <input type="password" value={pw2} onChange={(e) => { setPw2(e.target.value); setErr(""); }}
+            placeholder="••••••••" required className={inputBox} />
+        </label>
+        {err && <p className="text-sm text-[#b87168]">{err}</p>}
+        <button type="submit" disabled={busy} className={primaryBtn}>
+          {busy ? "Saving…" : "Save password & sign in"}
+        </button>
+        <button type="button" onClick={clearPending}
+          className="text-[0.7rem] tracking-[0.18em] uppercase text-[#4a3f3a]/45 hover:text-[#b87168]">
+          Cancel
+        </button>
+      </form>
+    );
+  }
+
+  if (!ready) return wrap("Admin Sign In", "Loading…", <div />);
+
+  /* ---- 2. local preview (no Netlify Identity) ---- */
+  if (!hasIdentity) {
+    const submit = (e: React.FormEvent) => {
+      e.preventDefault();
+      const r = devLogin(email, pw);
+      if (!r.ok) setErr(r.error ?? "Could not sign in.");
+    };
+    return wrap(
+      "Admin Sign In",
+      "Local preview mode — use your development passcode.",
+      <form onSubmit={submit} className="mt-7 grid gap-4">
+        <label className="grid gap-1.5">
+          <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Email</span>
+          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }}
+            placeholder="you@example.com" required className={inputBox} />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Passcode</span>
+          <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }}
+            placeholder="••••••••" required className={inputBox} />
+        </label>
+        {err && <p className="text-sm text-[#b87168]">{err}</p>}
+        <button type="submit" className={primaryBtn}>Sign In</button>
+      </form>
+    );
+  }
+
+  /* ---- 3. forgot password ---- */
+  if (mode === "forgot") {
+    const submit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setErr(""); setNote(""); setBusy(true);
+      const r = await requestPasswordReset(email);
+      setBusy(false);
+      if (r.ok) setNote("✓ Email sent. Open the link to choose a new password.");
+      else setErr(r.error ?? "Could not send the email.");
+    };
+    return wrap(
+      "Reset your password",
+      "We'll email you a link to choose a new one.",
+      <form onSubmit={submit} className="mt-7 grid gap-4">
+        <label className="grid gap-1.5">
+          <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Email</span>
+          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }}
+            placeholder="you@example.com" required autoFocus className={inputBox} />
+        </label>
+        {err && <p className="text-sm text-[#b87168]">{err}</p>}
+        {note && <p className="text-sm text-[#7d9b76]">{note}</p>}
+        <button type="submit" disabled={busy} className={primaryBtn}>
+          {busy ? "Sending…" : "Send reset link"}
+        </button>
+        <button type="button" onClick={() => { setMode("login"); setErr(""); setNote(""); }}
+          className="text-[0.7rem] tracking-[0.18em] uppercase text-[#4a3f3a]/45 hover:text-[#b87168]">
+          ← Back to sign in
+        </button>
+      </form>
+    );
+  }
+
+  /* ---- 4. normal sign in ---- */
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(""); setBusy(true);
+    const r = await login(email, pw);
+    setBusy(false);
+    if (!r.ok) setErr(r.error ?? "Could not sign in.");
+  };
+
+  return wrap(
+    "Admin Sign In",
+    "Sign in with your shop email to manage products, prices and photos.",
+    <form onSubmit={submit} className="mt-7 grid gap-4">
+      <label className="grid gap-1.5">
+        <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Email</span>
+        <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }}
+          placeholder="you@example.com" required autoFocus className={inputBox} />
+      </label>
+      <label className="grid gap-1.5">
+        <span className="text-[0.65rem] tracking-[0.22em] uppercase text-[#4a3f3a]/60">Password</span>
+        <input type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }}
+          placeholder="••••••••" required className={inputBox} />
+      </label>
+      {err && <p className="text-sm text-[#b87168]">{err}</p>}
+      <button type="submit" disabled={busy} className={primaryBtn}>
+        {busy ? "Signing in…" : "Sign In"}
+      </button>
+      <button type="button" onClick={() => { setMode("forgot"); setErr(""); }}
+        className="text-[0.7rem] tracking-[0.18em] uppercase text-[#4a3f3a]/45 hover:text-[#b87168]">
+        Forgot password?
+      </button>
+    </form>
   );
 }
 
