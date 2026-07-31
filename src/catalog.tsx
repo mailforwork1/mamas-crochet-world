@@ -120,6 +120,7 @@ type CatalogCtx = {
   publishError: string | null;
   publish: () => Promise<boolean>;
   uploadImage: (file: File) => Promise<string>;
+  uploadImages: (files: File[]) => Promise<string[]>;
 };
 
 const Ctx = createContext<CatalogCtx | null>(null);
@@ -279,9 +280,31 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         }
       },
 
+      uploadImages: async (files: File[]) => {
+        if (files.length === 0) return [];
+        const token = await getToken();
+        // No server (local dev): fall back to inline data URLs.
+        if (!hasIdentity || !token) {
+          return await Promise.all(files.map((f) => fileToDataUrl(f)));
+        }
+
+        const fd = new FormData();
+        files.forEach((f) => fd.append("file", f));
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          throw new Error(e.error ?? "Upload failed.");
+        }
+        const out = await res.json();
+        return (out.urls ?? [out.url]) as string[];
+      },
+
       uploadImage: async (file: File) => {
         const token = await getToken();
-        // No server (local dev): fall back to an inline data URL.
         if (!hasIdentity || !token) return await fileToDataUrl(file);
 
         const fd = new FormData();
@@ -295,8 +318,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
           const e = await res.json().catch(() => ({}));
           throw new Error(e.error ?? "Upload failed.");
         }
-        const { url } = await res.json();
-        return url as string;
+        const out = await res.json();
+        return (out.url ?? out.urls?.[0]) as string;
       },
 
       loading,

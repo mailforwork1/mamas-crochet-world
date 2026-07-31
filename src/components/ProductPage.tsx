@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "../router";
 import { useStore } from "../store";
 import { reviewsForProduct } from "../data";
@@ -32,11 +32,17 @@ export default function ProductPage({ id }: { id: string }) {
     );
   }
 
-  const gallery = product.gallery && product.gallery.length > 0
-    ? product.gallery
-    : [product.image];
+  // main photo first, then any extra gallery photos (no duplicates)
+  const gallery = Array.from(
+    new Set([product.image, ...(product.gallery ?? [])].filter(Boolean))
+  );
 
   const [activeImg, setActiveImg] = useState(gallery[0]);
+
+  // keep the big photo in sync when switching products
+  useEffect(() => {
+    setActiveImg(gallery[0]);
+  }, [product.id]);
   const [color, setColor] = useState(product.colors?.[0]?.name ?? "");
   const [size, setSize] = useState(product.sizes?.[0] ?? "");
   const [qty, setQty] = useState(1);

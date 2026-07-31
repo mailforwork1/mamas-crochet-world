@@ -21,6 +21,8 @@ function isIdentityHash(h: string) {
 
 function parseHash(): Route {
   const raw = window.location.hash;
+  // While the Identity widget is working with a token, stay on the admin
+  // screen instead of falling back to the home page.
   if (isIdentityHash(raw)) return { name: "admin" };
   const h = raw.replace(/^#\/?/, "");
   if (h.startsWith("product/")) return { name: "product", id: h.slice("product/".length) };
@@ -39,6 +41,8 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     const onHash = () => setRoute(parseHash());
     window.addEventListener("hashchange", onHash);
     window.addEventListener("popstate", onHash);
+    // Safety net: the Identity widget rewrites the URL with replaceState,
+    // which fires no event. Poll briefly so we never get stuck.
     const iv = window.setInterval(onHash, 400);
     return () => {
       window.removeEventListener("hashchange", onHash);

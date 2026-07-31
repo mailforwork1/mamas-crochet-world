@@ -271,6 +271,94 @@ function ImagePicker({
   );
 }
 
+/* Extra photos for a product */
+function GalleryPicker({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const { uploadImages } = useCatalog();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const add = async (files: File[]) => {
+    setBusy(true);
+    setErr("");
+    try {
+      const urls = await uploadImages(files);
+      onChange([...value, ...urls]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-2">
+        {value.map((src, i) => (
+          <div
+            key={src + i}
+            className="group relative h-20 w-20 overflow-hidden rounded-xl bg-[#f6ede0]/60 ring-1 ring-[#e8b4ad]/30"
+          >
+            <img src={src} alt="" className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((_, k) => k !== i))}
+              className="absolute top-1 right-1 grid h-5 w-5 place-items-center rounded-full bg-white/90 text-[11px] text-[#b87168] opacity-0 group-hover:opacity-100 transition"
+              aria-label="Remove photo"
+            >
+              ✕
+            </button>
+            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/35 py-0.5 opacity-0 group-hover:opacity-100 transition">
+              <button type="button" onClick={() => move(i, -1)} className="text-white text-[10px] px-1">←</button>
+              <button type="button" onClick={() => move(i, 1)} className="text-white text-[10px] px-1">→</button>
+            </div>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="grid h-20 w-20 place-items-center rounded-xl bg-white text-center text-[0.6rem] leading-tight text-[#4a3f3a]/55 ring-1 ring-dashed ring-[#e8b4ad]/60 hover:text-[#b87168] hover:ring-[#b87168] transition"
+        >
+          {busy ? "Uploading…" : "+ Add\nphotos"}
+        </button>
+      </div>
+
+      {err && <p className="text-[0.65rem] text-[#b87168]">{err}</p>}
+      <p className="text-[0.62rem] text-[#4a3f3a]/45">
+        You can select several photos at once. The main photo above is shown first.
+      </p>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) add(files);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 /* =================== PRODUCT EDITOR =================== */
 function ProductEditor({
   draft,
@@ -309,8 +397,15 @@ function ProductEditor({
         </div>
 
         <div className="mt-6 grid gap-4">
-          <Field label="Photo">
+          <Field label="Main photo">
             <ImagePicker value={draft.image} onChange={(v) => set("image", v)} />
+          </Field>
+
+          <Field label="More photos (gallery)">
+            <GalleryPicker
+              value={draft.gallery ?? []}
+              onChange={(v) => set("gallery", v)}
+            />
           </Field>
 
           <Field label="Product name">

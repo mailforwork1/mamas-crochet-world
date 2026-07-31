@@ -1,5 +1,6 @@
-import type { Context, Config } from "@netlify/functions";
+import type { Config } from "@netlify/functions";
 import { getStore } from "@netlify/blobs";
+import { requireAdmin } from "./_auth.mts";
 
 /**
  * GET  /api/catalog  -> public, returns the saved catalog (or 204 if none yet)
@@ -15,22 +16,7 @@ const json = (body: unknown, status = 200) =>
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 
-function isAdmin(context: Context) {
-  const user = context.clientContext?.user;
-  if (!user) return false;
-
-  const roles: string[] = user.app_metadata?.roles ?? [];
-  if (roles.includes("admin")) return true;
-
-  const allow = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-
-  return allow.length > 0 && allow.includes(String(user.email).toLowerCase());
-}
-
-export default async (req: Request, context: Context) => {
+export default async (req: Request) => {
   const store = getStore({ name: "catalog", consistency: "strong" });
 
   if (req.method === "GET") {
@@ -40,9 +26,8 @@ export default async (req: Request, context: Context) => {
   }
 
   if (req.method === "PUT" || req.method === "POST") {
-    if (!isAdmin(context)) {
-      return json({ error: "Not authorised. Please sign in as an admin." }, 401);
-    }
+    const auth = await requireAdmin(req);
+    if (!auth.ok) return json({ error: auth.error }, 401);
 
     let body: unknown;
     try {
@@ -54,7 +39,7 @@ export default async (req: Request, context: Context) => {
     const payload = {
       ...(body as Record<string, unknown>),
       updatedAt: new Date().toISOString(),
-      updatedBy: context.clientContext?.user?.email ?? "unknown",
+      updatedBy: auth.email,
     };
 
     await store.setJSON("current", payload);
