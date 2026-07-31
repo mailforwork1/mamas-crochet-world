@@ -120,14 +120,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ni.on("init", (u) => {
         setUser(u ?? null);
         setReady(true);
-        // Once the widget has consumed the token, land the user on /#/admin.
-        if (stashed) {
-          if (/invite_token=/.test(stashed)) ni.open("signup");
-          else if (/recovery_token=/.test(stashed)) ni.open("login");
-          goToAdmin();
-        }
+        // With an invite / recovery token the widget opens its own
+        // "set your password" form — we must NOT call open() ourselves,
+        // and we must leave the token in the URL until it is done.
       });
+
+      // Fired once the widget finishes with a recovery / invite token.
+      ni.on("open", () => { /* widget handling the token */ });
       ni.on("login", (u) => {
+        setUser(u ?? null);
+        ni.close();
+        goToAdmin();
+      });
+      ni.on("signup", (u) => {
         setUser(u ?? null);
         ni.close();
         goToAdmin();
