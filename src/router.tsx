@@ -14,8 +14,17 @@ type RouterCtx = {
 
 const RouterContext = createContext<RouterCtx | null>(null);
 
+/** Netlify Identity puts its tokens in the hash — leave those alone. */
+function isIdentityHash(h: string) {
+  return /(invite_token|recovery_token|confirmation_token|email_change_token|access_token|error_description)=/.test(h);
+}
+
 function parseHash(): Route {
-  const h = window.location.hash.replace(/^#\/?/, "");
+  const raw = window.location.hash;
+  // While the Identity widget is working with a token, stay on the admin
+  // screen instead of falling back to the home page.
+  if (isIdentityHash(raw)) return { name: "admin" };
+  const h = raw.replace(/^#\/?/, "");
   if (h.startsWith("product/")) return { name: "product", id: h.slice("product/".length) };
   if (h.startsWith("category/")) return { name: "category", slug: h.slice("category/".length) };
   if (h === "shop") return { name: "shop" };
