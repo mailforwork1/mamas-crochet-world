@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { useCatalog, type Catalog } from "../catalog";
 import { useRouter } from "../router";
@@ -822,6 +822,210 @@ function SettingsTab() {
   );
 }
 
+/* =================== ORDERS =================== */
+type OrderLine = { id: string; name: string; price: number; qty: number };
+type Order = {
+  id: string;
+  ref: string;
+  createdAt: string;
+  status: "new" | "confirmed" | "shipped" | "completed" | "cancelled";
+  customer: { name: string; phone: string; email?: string; address: string; city: string; notes?: string };
+  items: OrderLine[];
+  subtotal: number;
+  delivery: number;
+  total: number;
+};
+
+const STATUS_LABEL: Record<Order["status"], string> = {
+  new: "New",
+  confirmed: "Confirmed",
+  shipped: "Shipped",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const STATUS_STYLE: Record<Order["status"], string> = {
+  new: "bg-[#b87168] text-white",
+  confirmed: "bg-[#e8b4ad]/50 text-[#7a4b44]",
+  shipped: "bg-[#d9d3e4]/70 text-[#544a63]",
+  completed: "bg-[#dbe5d6] text-[#4b5c44]",
+  cancelled: "bg-[#e5e0da] text-[#6b625b]",
+};
+
+function OrdersTab() {
+  const { getToken } = useAuth();
+  const [orders, setOrders] = useState<Order[] | null>(null);
+  const [err, setErr] = useState("");
+  const [filter, setFilter] = useState<"all" | Order["status"]>("all");
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const load = async () => {
+    setErr("");
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/orders", {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        setErr(e.error ?? "Could not load orders.");
+        setOrders([]);
+        return;
+      }
+      const out = await res.json();
+      setOrders(out.orders ?? []);
+    } catch {
+      setErr("Could not reach the server.");
+      setOrders([]);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const patch = async (body: Record<string, unknown>) => {
+    const token = await getToken();
+    await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    load();
+  };
+
+  if (orders === null) return <p className="text-sm text-[#4a3f3a]/55">Loading orders…</p>;
+
+  const shown = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const newCount = orders.filter((o) => o.status === "new").length;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        {(["all", "new", "confirmed", "shipped", "completed", "cancelled"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded-full px-4 py-2 text-[0.6rem] tracking-[0.18em] uppercase transition ${
+              filter === f ? "bg-[#4a3f3a] text-[#fdfaf4]" : "text-[#4a3f3a]/65 ring-1 ring-[#e8b4ad]/40 hover:text-[#b87168]"
+            }`}
+          >
+            {f === "all" ? `All (${orders.length})` : `${STATUS_LABEL[f]} (${orders.filter((o) => o.status === f).length})`}
+          </button>
+        ))}
+        <button onClick={load} className="ml-auto rounded-full px-4 py-2 text-[0.6rem] tracking-[0.18em] uppercase text-[#4a3f3a]/65 ring-1 ring-[#e8b4ad]/40 hover:text-[#b87168]">
+          ↻ Refresh
+        </button>
+      </div>
+
+      {newCount > 0 && (
+        <p className="mt-4 rounded-xl bg-[#f3d9d4]/50 px-4 py-3 text-sm text-[#b87168]">
+          🔔 You have {newCount} new order{newCount > 1 ? "s" : ""} waiting.
+        </p>
+      )}
+      {err && <p className="mt-4 rounded-xl bg-[#f3d9d4]/50 px-4 py-3 text-sm text-[#b87168]">{err}</p>}
+
+      <div className="mt-6 grid gap-3">
+        {shown.length === 0 && (
+          <p className="rounded-2xl bg-white/60 p-8 text-center text-sm text-[#4a3f3a]/55 ring-1 ring-[#e8b4ad]/30">
+            No orders here yet.
+          </p>
+        )}
+
+        {shown.map((o) => {
+          const expanded = openId === o.id;
+          return (
+            <div key={o.id} className="rounded-2xl bg-white/60 ring-1 ring-[#e8b4ad]/30 overflow-hidden">
+              <button
+                onClick={() => setOpenId(expanded ? null : o.id)}
+                className="flex w-full flex-wrap items-center gap-3 p-4 text-left hover:bg-[#f3d9d4]/15"
+              >
+                <span className={`rounded-full px-2.5 py-1 text-[0.55rem] font-semibold tracking-[0.14em] uppercase ${STATUS_STYLE[o.status]}`}>
+                  {STATUS_LABEL[o.status]}
+                </span>
+                <span className="font-serif text-[#4a3f3a]">{o.customer.name}</span>
+                <span className="text-xs text-[#4a3f3a]/55">{o.customer.city}</span>
+                <span className="text-[0.65rem] text-[#4a3f3a]/40">{o.ref}</span>
+                <span className="ml-auto text-sm text-[#b87168]">{formatPrice(o.total)}</span>
+                <span className="text-[0.65rem] text-[#4a3f3a]/45">
+                  {new Date(o.createdAt).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
+              </button>
+
+              {expanded && (
+                <div className="border-t border-[#f3d9d4]/50 p-5 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-[0.62rem] tracking-[0.2em] uppercase text-[#4a3f3a]/55 mb-2">Customer</p>
+                    <p className="text-sm text-[#4a3f3a]">{o.customer.name}</p>
+                    <p className="text-sm text-[#4a3f3a]/75">
+                      <a href={`tel:${o.customer.phone}`} className="hover:text-[#b87168]">{o.customer.phone}</a>
+                      {" · "}
+                      <a
+                        href={`https://wa.me/${o.customer.phone.replace(/[^0-9]/g, "").replace(/^0/, "92")}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-[#b87168] hover:underline"
+                      >
+                        WhatsApp
+                      </a>
+                    </p>
+                    {o.customer.email && <p className="text-sm text-[#4a3f3a]/75">{o.customer.email}</p>}
+                    <p className="mt-2 text-sm leading-relaxed text-[#4a3f3a]/75">
+                      {o.customer.address}<br />{o.customer.city}
+                    </p>
+                    {o.customer.notes && (
+                      <p className="mt-2 rounded-xl bg-[#f3d9d4]/30 p-3 text-xs italic text-[#4a3f3a]/75">
+                        “{o.customer.notes}”
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[0.62rem] tracking-[0.2em] uppercase text-[#4a3f3a]/55 mb-2">Items</p>
+                    {o.items.map((i) => (
+                      <div key={i.id} className="flex justify-between gap-3 text-sm text-[#4a3f3a]/80">
+                        <span className="min-w-0 truncate">{i.name} × {i.qty}</span>
+                        <span className="shrink-0">{formatPrice(i.price * i.qty)}</span>
+                      </div>
+                    ))}
+                    <div className="mt-2 border-t border-[#e8b4ad]/30 pt-2 text-sm">
+                      <div className="flex justify-between text-[#4a3f3a]/65">
+                        <span>Delivery</span><span>{o.delivery === 0 ? "Free" : formatPrice(o.delivery)}</span>
+                      </div>
+                      <div className="flex justify-between font-serif text-lg text-[#4a3f3a]">
+                        <span>Total</span><span>{formatPrice(o.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 flex flex-wrap items-center gap-2 border-t border-[#f3d9d4]/50 pt-4">
+                    <span className="text-[0.62rem] tracking-[0.2em] uppercase text-[#4a3f3a]/55">Mark as</span>
+                    {(["new", "confirmed", "shipped", "completed", "cancelled"] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => patch({ id: o.id, status: st })}
+                        disabled={o.status === st}
+                        className={`rounded-full px-3.5 py-1.5 text-[0.58rem] tracking-[0.16em] uppercase transition ${
+                          o.status === st ? STATUS_STYLE[st] + " opacity-100" : "text-[#4a3f3a]/60 ring-1 ring-[#e8b4ad]/40 hover:text-[#b87168]"
+                        }`}
+                      >
+                        {STATUS_LABEL[st]}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => confirm(`Delete order ${o.ref}?`) && patch({ id: o.id, delete: true })}
+                      className="ml-auto rounded-full px-3.5 py-1.5 text-[0.58rem] tracking-[0.16em] uppercase text-[#4a3f3a]/40 hover:text-[#b87168]"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 /* =================== SHELL =================== */
 export default function AdminPage() {
   const { isAdmin, email, logout, hasIdentity } = useAuth();
@@ -830,7 +1034,7 @@ export default function AdminPage() {
     products, categories, isDirty,
     publish, publishing, lastPublished, publishError,
   } = useCatalog();
-  const [tab, setTab] = useState<"products" | "categories" | "settings">("products");
+  const [tab, setTab] = useState<"orders" | "products" | "categories" | "settings">("orders");
   const [done, setDone] = useState(false);
 
   if (!isAdmin) return <Login />;
@@ -844,6 +1048,7 @@ export default function AdminPage() {
   };
 
   const tabs = [
+    { id: "orders", label: "Orders" },
     { id: "products", label: `Products (${products.length})` },
     { id: "categories", label: `Categories (${categories.length})` },
     { id: "settings", label: "Settings" },
@@ -930,6 +1135,7 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-8">
+        {tab === "orders" && <OrdersTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "categories" && <CategoriesTab />}
         {tab === "settings" && <SettingsTab />}

@@ -68,6 +68,185 @@ function EmptyState({ text, cta }: { text: string; cta: React.ReactNode }) {
   );
 }
 
+
+/* ---------- CHECKOUT FORM ---------- */
+type CheckoutLine = { id: string; name: string; price: number; qty: number };
+
+function CheckoutForm({
+  open,
+  onClose,
+  lines,
+  subtotal,
+  onPlaced,
+}: {
+  open: boolean;
+  onClose: () => void;
+  lines: CheckoutLine[];
+  subtotal: number;
+  onPlaced: (ref: string) => void;
+}) {
+  const { settings } = useCatalog();
+  const [f, setF] = useState({ name: "", phone: "", email: "", address: "", city: "", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const delivery = subtotal >= (settings.freeWrapOver ?? 5000) ? 0 : 250;
+  const total = subtotal + delivery;
+
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setF({ ...f, [k]: e.target.value });
+    setErr("");
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!f.name.trim() || !f.phone.trim() || !f.address.trim() || !f.city.trim()) {
+      setErr("Please fill in your name, phone, address and city.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ customer: f, items: lines, delivery }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(out.error ?? "Could not place the order. Please try again.");
+        return;
+      }
+      onPlaced(out.ref);
+    } catch {
+      setErr("Could not reach the server. Please check your connection.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const inp =
+    "w-full rounded-xl bg-white px-3.5 py-2.5 text-sm text-[#4a3f3a] ring-1 ring-[#e8b4ad]/40 outline-none focus:ring-[#b87168]";
+  const lbl = "text-[0.62rem] tracking-[0.2em] uppercase text-[#4a3f3a]/55";
+
+  return (
+    <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#3c352e]/45 backdrop-blur-sm p-4 md:p-8">
+      <div className="mx-auto max-w-lg rounded-[28px] bg-[#fdfaf4] p-6 md:p-8 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[0.7rem] tracking-[0.32em] uppercase text-[#b87168]">Almost there</p>
+            <h2 className="font-serif mt-2 text-2xl text-[#4a3f3a]">Delivery details</h2>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-[#4a3f3a]/50 hover:text-[#b87168]">✕</button>
+        </div>
+
+        <form onSubmit={submit} className="mt-6 grid gap-4">
+          <label className="grid gap-1.5">
+            <span className={lbl}>Full name *</span>
+            <input value={f.name} onChange={set("name")} required placeholder="Ayesha Khan" className={inp} />
+          </label>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="grid gap-1.5">
+              <span className={lbl}>Phone / WhatsApp *</span>
+              <input value={f.phone} onChange={set("phone")} required placeholder="03XX-XXXXXXX" className={inp} />
+            </label>
+            <label className="grid gap-1.5">
+              <span className={lbl}>City *</span>
+              <input value={f.city} onChange={set("city")} required placeholder="Peshawar" className={inp} />
+            </label>
+          </div>
+
+          <label className="grid gap-1.5">
+            <span className={lbl}>Full address *</span>
+            <textarea value={f.address} onChange={set("address")} required rows={2}
+              placeholder="House / street / area" className={inp} />
+          </label>
+
+          <label className="grid gap-1.5">
+            <span className={lbl}>Email (optional)</span>
+            <input type="email" value={f.email} onChange={set("email")} placeholder="you@example.com" className={inp} />
+          </label>
+
+          <label className="grid gap-1.5">
+            <span className={lbl}>Note for us (optional)</span>
+            <textarea value={f.notes} onChange={set("notes")} rows={2}
+              placeholder="Gift wrap, colour preference, delivery timing…" className={inp} />
+          </label>
+
+          {/* summary */}
+          <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-[#e8b4ad]/25 text-sm">
+            {lines.map((l) => (
+              <div key={l.id} className="flex justify-between gap-3 text-[#4a3f3a]/75">
+                <span className="min-w-0 truncate">{l.name} × {l.qty}</span>
+                <span className="shrink-0">{formatPrice(l.price * l.qty)}</span>
+              </div>
+            ))}
+            <div className="mt-3 border-t border-[#e8b4ad]/30 pt-3 grid gap-1">
+              <div className="flex justify-between text-[#4a3f3a]/70">
+                <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-[#4a3f3a]/70">
+                <span>Delivery</span>
+                <span>{delivery === 0 ? "Free" : formatPrice(delivery)}</span>
+              </div>
+              <div className="flex justify-between font-serif text-lg text-[#4a3f3a] mt-1">
+                <span>Total</span><span>{formatPrice(total)}</span>
+              </div>
+            </div>
+            <p className="mt-2 text-[0.65rem] text-[#4a3f3a]/55">
+              Cash on delivery. We'll message you on WhatsApp to confirm.
+            </p>
+          </div>
+
+          {err && <p className="text-sm text-[#b87168]">{err}</p>}
+
+          <button type="submit" disabled={busy}
+            className="rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition disabled:opacity-50">
+            {busy ? "Placing order…" : `Place order · ${formatPrice(total)}`}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- ORDER PLACED ---------- */
+function OrderPlaced({ refCode, onClose }: { refCode: string; onClose: () => void }) {
+  const { settings } = useCatalog();
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-[#3c352e]/45 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-[28px] bg-[#fdfaf4] p-8 text-center shadow-2xl">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#f3d9d4]/50 text-3xl">✿</div>
+        <h2 className="font-serif mt-5 text-2xl text-[#4a3f3a]">Thank you!</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#4a3f3a]/70">
+          Your order has been received. We'll message you shortly to confirm.
+        </p>
+        <p className="mt-4 rounded-xl bg-white/70 py-3 text-sm text-[#4a3f3a] ring-1 ring-[#e8b4ad]/25">
+          Order reference<br />
+          <strong className="font-serif text-lg tracking-wide">{refCode}</strong>
+        </p>
+        <div className="mt-6 grid gap-2">
+          <a
+            href={`https://ig.me/m/${settings.igHandle}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full bg-[#4a3f3a] py-3 text-xs tracking-[0.2em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition"
+          >
+            Message us on Instagram
+          </a>
+          <button onClick={onClose}
+            className="rounded-full py-3 text-xs tracking-[0.2em] uppercase text-[#4a3f3a]/60 hover:text-[#b87168]">
+            Continue shopping
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- CART ---------- */
 export const IG_HANDLE = "mamas_crochet_world";
 
@@ -92,6 +271,8 @@ function CartPanel() {
   const { getProduct, settings } = useCatalog();
   const { navigate } = useRouter();
   const [copied, setCopied] = useState(false);
+  const [checkout, setCheckout] = useState(false);
+  const [placedRef, setPlacedRef] = useState<string | null>(null);
 
   const lines = cart
     .map((l) => ({ line: l, product: getProduct(l.id) }))
@@ -129,7 +310,8 @@ function CartPanel() {
   };
 
   return (
-    <Drawer
+    <>
+      <Drawer
       open={cartOpen}
       onClose={() => setCartOpen(false)}
       title="Your Basket"
@@ -144,15 +326,18 @@ function CartPanel() {
               {subtotal >= settings.freeWrapOver ? "✿ Complimentary wrapping unlocked!" : `Add ${formatPrice(settings.freeWrapOver - subtotal)} more for free wrapping.`}
             </p>
             <button
-              onClick={handleCheckout}
-              className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition"
+              onClick={() => { setCartOpen(false); setCheckout(true); }}
+              className="mt-4 w-full rounded-full bg-[#4a3f3a] py-3.5 text-xs font-medium tracking-[0.22em] uppercase text-[#fdfaf4] hover:bg-[#b87168] transition"
             >
-              <InstagramIcon size={15} />
-              {copied ? "✓ Order copied — opening Instagram" : "Order on Instagram"}
+              Proceed to Checkout
             </button>
-            <p className="mt-2 text-center text-[0.65rem] leading-relaxed text-[#4a3f3a]/55">
-              Your order list is copied automatically — just paste it in the chat and send.
-            </p>
+            <button
+              onClick={handleCheckout}
+              className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-full py-3 text-[0.65rem] font-medium tracking-[0.2em] uppercase text-[#4a3f3a]/70 ring-1 ring-[#e8b4ad]/40 hover:text-[#b87168] transition"
+            >
+              <InstagramIcon size={14} />
+              {copied ? "✓ Copied — opening Instagram" : "Or order on Instagram"}
+            </button>
             <button
               onClick={clearCart}
               className="mt-2 w-full rounded-full py-2 text-[0.7rem] tracking-[0.18em] uppercase text-[#4a3f3a]/60 hover:text-[#b87168] transition"
@@ -224,7 +409,29 @@ function CartPanel() {
           ))}
         </ul>
       )}
-    </Drawer>
+      </Drawer>
+
+      <CheckoutForm
+        open={checkout}
+        onClose={() => setCheckout(false)}
+        lines={lines.map((x) => ({
+          id: x.line.id,
+          name: x.product!.name,
+          price: x.product!.price,
+          qty: x.line.qty,
+        }))}
+        subtotal={subtotal}
+        onPlaced={(ref) => {
+          setCheckout(false);
+          setPlacedRef(ref);
+          clearCart();
+        }}
+      />
+
+      {placedRef && (
+        <OrderPlaced refCode={placedRef} onClose={() => setPlacedRef(null)} />
+      )}
+    </>
   );
 }
 
